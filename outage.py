@@ -3,10 +3,15 @@ import json
 import xml.etree.ElementTree as ET
 import zipfile
 import os
+import shutil
 
 # URLs for county geometry and outage details
 geometry_url = "https://poweroutage.us/content/geometry/us/countygeometry/florida.json"
 outage_url = "https://poweroutage.us/api/web/counties?key=9818916638&countryid=us&statename=Florida"
+
+# Directories for output and NGINX
+output_dir = "/opt/PowerOutage2ATAK/output"
+nginx_dir = "/var/www/html/poweroutage"
 
 # Function to calculate a color based on the outage percentage
 def calculate_color(outage_percentage):
@@ -69,8 +74,6 @@ for feature in county_features:
     if geometry["type"].lower() == "multipolygon":
         # Handle MultiPolygon type with multiple sets of coordinates
         placemark = ET.SubElement(document, "Placemark")
-        name = ET.SubElement(placemark, "name")
-        name.text = feature.get("NAME", "Unknown")
 
         # Add description with outage information
         description = ET.SubElement(placemark, "description")
@@ -108,8 +111,6 @@ for feature in county_features:
     elif geometry["type"].lower() == "polygon":
         # Handle Polygon type with coordinates
         placemark = ET.SubElement(document, "Placemark")
-        name = ET.SubElement(placemark, "name")
-        name.text = feature.get("NAME", "Unknown")
 
         # Add description with outage information
         description = ET.SubElement(placemark, "description")
@@ -150,15 +151,25 @@ for county_name, outage_details in outage_map.items():
     poly_color_elem.text = calculate_color(outage_percentage)
 
 # Write the KML to a file
-tree = ET.ElementTree(kml)
-kml_path = "florida_county_outages.kml"
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+kml_path = os.path.join(output_dir, "florida_county_outages.kml")
 with open(kml_path, "wb") as kml_file:
+    tree = ET.ElementTree(kml)
     tree.write(kml_file, encoding="utf-8", xml_declaration=True)
 
 print("KML file created: florida_county_outages.kml")
 
 # Create KMZ from KML
-kmz_path = "florida_county_outages.kmz"
+kmz_path = os.path.join(output_dir, "florida_county_outages.kmz")
 with zipfile.ZipFile(kmz_path, 'w', zipfile.ZIP_DEFLATED) as kmz:
     kmz.write(kml_path, os.path.basename(kml_path))
 print(f"KMZ file created: {kmz_path}")
+
+# Copy files to NGINX directory
+if not os.path.exists(nginx_dir):
+    os.makedirs(nginx_dir)
+shutil.copy(kml_path, nginx_dir)
+shutil.copy(kmz_path, nginx_dir)
+
+print("Files moved and copied to NGINX directory.")
